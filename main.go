@@ -26,7 +26,7 @@ func main() {
 	})
 
 	http.HandleFunc("/pb", func(w http.ResponseWriter, r *http.Request) {
-		body, _ := ioutil.ReadFile("pb.html")
+		body, _ := ioutil.ReadFile("public/pb.html")
 		io.WriteString(w, string(body))
 	})
 	http.HandleFunc("/api/v1/pb", pbHandler)

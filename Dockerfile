@@ -15,6 +15,7 @@ FROM alpine:latest
 WORKDIR /srv/application
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=builder /app/app /srv/application/toolbox
+COPY --from=builder /app/public /srv/application/public
 # COPY --from=builder /app/configs/config-build.yml /srv/express/configs/config.yml
 
 ENTRYPOINT ["./toolbox"]
