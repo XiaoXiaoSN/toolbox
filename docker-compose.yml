@@ -1,0 +1,15 @@
+version: '3.1'
+services:
+  redis:
+    image: redis
+    # ports:
+    #   - 6379:6379
+
+  toolbox:
+    build:
+      context: .
+    restart: always
+    ports:
+      - 23040:8000
+    depends_on:
+        - "redis"
