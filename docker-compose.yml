@@ -4,12 +4,10 @@ services:
     image: redis
     # ports:
     #   - 6379:6379
-    restart: always
 
   toolbox:
     build:
       context: .
-    restart: always
     ports:
       - 23040:8000
     depends_on:
