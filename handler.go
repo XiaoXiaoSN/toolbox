@@ -79,7 +79,7 @@ func shortenURLHandler(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPost:
 		setShortenURL(w, r)
 		return
-	case http.MethodGet:
+	case http.MethodGet, http.MethodOptions:
 		getShortenURL(w, r)
 		return
 	}
@@ -122,6 +122,11 @@ func setShortenURL(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+
+	//Allow CORS here By * or specific origin
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(resp)
 }
