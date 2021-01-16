@@ -79,8 +79,11 @@ func shortenURLHandler(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPost:
 		setShortenURL(w, r)
 		return
-	case http.MethodGet, http.MethodOptions:
+	case http.MethodGet:
 		getShortenURL(w, r)
+		return
+	case http.MethodOptions:
+		allowCORS(w, r)
 		return
 	}
 }
@@ -123,7 +126,7 @@ func setShortenURL(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	//Allow CORS here By * or specific origin
+	// Allow CORS here By * or specific origin
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 
@@ -152,4 +155,11 @@ func getShortenURL(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Location", shortenURL)
 	w.WriteHeader(http.StatusMovedPermanently)
+}
+
+func allowCORS(w http.ResponseWriter, r *http.Request) {
+	// Allow CORS here By * or specific origin
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+	w.Header().Set("Access-Control-Allow-Methods", "*")
 }
