@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
 
 	"github.com/go-redis/redis"
 	"github.com/gorilla/mux"
@@ -13,9 +14,14 @@ import (
 var redisClient *redis.Client
 
 func init() {
+	redisAddr := os.Getenv("REDIS_ADDR")
+	if redisAddr == "" {
+		redisAddr = "redis:6379"
+	}
+
 	redisClient = redis.NewClient(&redis.Options{
-		Addr:     "redis:6379",
-		Password: "",
+		Addr:     redisAddr,
+		Password: os.Getenv("REDIS_PW"),
 		DB:       0,
 	})
 }
@@ -25,7 +31,7 @@ func main() {
 
 	{
 		r.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-			io.WriteString(w, "Hello world!")
+			io.WriteString(w, "Hello world!!")
 		})
 
 		r.HandleFunc("/pb", func(w http.ResponseWriter, r *http.Request) {
