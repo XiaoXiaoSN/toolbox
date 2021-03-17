@@ -36,6 +36,9 @@ jobs:
             --tag xiao4011/toolbox:latest \
             --platform linux/amd64,linux/arm64,linux/arm/v7,linux/arm/v6  .
 
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
       # https://github.com/marketplace/actions/docker-deployment
       - name: Deploy to Docker
         uses: wshihadeh/docker-deployment-action@v1
