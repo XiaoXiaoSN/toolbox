@@ -1,15 +1,27 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"net/http"
 
+	"github.com/go-redis/redis/v8"
 	"github.com/gorilla/mux"
-	"gopkg.in/redis.v4"
 )
+
+// **************************************************
+// route: /pb
+// paste static HTTP page
+// **************************************************
+
+func pbStaticPage(w http.ResponseWriter, r *http.Request) {
+	body, _ := ioutil.ReadFile("public/pb.html")
+	io.WriteString(w, string(body))
+}
 
 // **************************************************
 // route: /api/v1/pb
@@ -30,7 +42,9 @@ type pbStruct struct {
 }
 
 func getPB(w http.ResponseWriter, r *http.Request) {
-	result, err := redisClient.Get("pb").Result()
+	ctx := context.Background()
+
+	result, err := redisClient.Get(ctx, "pb").Result()
 	if err != nil {
 		log.Println(err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -49,6 +63,7 @@ func getPB(w http.ResponseWriter, r *http.Request) {
 }
 
 func setPB(w http.ResponseWriter, r *http.Request) {
+	ctx := context.Background()
 	decoder := json.NewDecoder(r.Body)
 
 	var pb pbStruct
@@ -59,7 +74,7 @@ func setPB(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = redisClient.Set("pb", pb.Text, 0).Err()
+	err = redisClient.Set(ctx, "pb", pb.Text, 0).Err()
 	if err != nil {
 		log.Println(err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -80,10 +95,10 @@ func shortenURLHandler(w http.ResponseWriter, r *http.Request) {
 		setShortenURL(w, r)
 		return
 	case http.MethodGet:
-		getShortenURL(w, r)
+		listShortenURL(w, r)
 		return
-	case http.MethodOptions:
-		allowCORS(w, r)
+	case http.MethodDelete:
+		deleteShortenURL(w, r)
 		return
 	}
 }
@@ -94,6 +109,7 @@ type sURLRequest struct {
 }
 
 func setShortenURL(w http.ResponseWriter, r *http.Request) {
+	ctx := context.Background()
 	decoder := json.NewDecoder(r.Body)
 
 	var sURL sURLRequest
@@ -112,7 +128,8 @@ func setShortenURL(w http.ResponseWriter, r *http.Request) {
 		sURL.Shorten = randStr(4)
 	}
 
-	err = redisClient.Set(fmt.Sprintf("sURL.%s", sURL.Shorten), sURL.URL, 0).Err()
+	key := fmt.Sprintf("sURL.%s", sURL.Shorten)
+	err = redisClient.Set(ctx, key, sURL.URL, 0).Err()
 	if err != nil {
 		log.Println(err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -126,15 +143,13 @@ func setShortenURL(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Allow CORS here By * or specific origin
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(resp)
 }
 
 func getShortenURL(w http.ResponseWriter, r *http.Request) {
+	ctx := context.Background()
+
 	shorten, ok := mux.Vars(r)["shorten"]
 	if !ok {
 		io.WriteString(w, "404 - not found")
@@ -143,7 +158,7 @@ func getShortenURL(w http.ResponseWriter, r *http.Request) {
 	}
 
 	key := fmt.Sprintf("sURL.%s", shorten)
-	shortenURL, err := redisClient.Get(key).Result()
+	shortenURL, err := redisClient.Get(ctx, key).Result()
 	if err == redis.Nil {
 		io.WriteString(w, "404 - not found")
 		w.WriteHeader(http.StatusNotFound)
@@ -157,9 +172,83 @@ func getShortenURL(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusMovedPermanently)
 }
 
-func allowCORS(w http.ResponseWriter, r *http.Request) {
-	// Allow CORS here By * or specific origin
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-	w.Header().Set("Access-Control-Allow-Methods", "*")
+type sURLResponse struct {
+	URL     string `json:"url"`
+	Shorten string `json:"shorten"`
+}
+
+func listShortenURL(w http.ResponseWriter, r *http.Request) {
+	ctx := context.Background()
+	sURLList := make([]sURLResponse, 0)
+
+	var cursor uint64
+	var n int
+	for {
+		var keys []string
+		var err error
+
+		keys, cursor, err = redisClient.Scan(ctx, cursor, "sURL.*", 20).Result()
+		if err != nil {
+			io.WriteString(w, "500 - redis error")
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		n += len(keys)
+
+		var targetURL string
+		for _, key := range keys {
+			targetURL, err = redisClient.Get(ctx, key).Result()
+			if err == redis.Nil {
+				io.WriteString(w, "404 - not found")
+				w.WriteHeader(http.StatusNotFound)
+				return
+			} else if err != nil {
+				io.WriteString(w, "500 - redis error")
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+
+			sURLList = append(sURLList, sURLResponse{
+				URL:     targetURL,
+				Shorten: key,
+			})
+		}
+		if cursor == 0 {
+			break
+		}
+	}
+
+	resp, err := json.Marshal(sURLList)
+	if err != nil {
+		log.Println(err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(resp)
+}
+
+func deleteShortenURL(w http.ResponseWriter, r *http.Request) {
+	ctx := context.Background()
+
+	shorten, ok := mux.Vars(r)["shorten"]
+	if !ok {
+		io.WriteString(w, "404 - not found")
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	key := fmt.Sprintf("sURL.%s", shorten)
+	_, err := redisClient.Del(ctx, key).Result()
+	if err == redis.Nil {
+		io.WriteString(w, "404 - not found")
+		w.WriteHeader(http.StatusNotFound)
+		return
+	} else if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
 }
