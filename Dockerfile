@@ -5,7 +5,7 @@ ENV GO111MODULE=on
 WORKDIR /app
 COPY . .
 RUN apk add --update git ca-certificates
-RUN go mod download 
+RUN go mod download
 RUN go build -o app .
 
 # pull the binary file and service work really in the layer
