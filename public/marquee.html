@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Marquee Text</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            background-color: #000;
+            color: #fff;
+        }
+
+        #marquee-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #marquee-text {
+            position: absolute;
+            white-space: nowrap;
+            font-size: 80vh;
+            font-family: "Microsoft JhengHei", "Arial", sans-serif;
+            animation: marquee linear infinite;
+            line-height: 1;
+            display: flex;
+            align-items: center;
+            height: 100%;
+            left: 20%;
+        }
+
+        @keyframes marquee {
+            0% {
+                transform: translateX(100vw);
+            }
+            100% {
+                transform: translateX(calc(-100% - 20vw));
+            }
+        }
+
+        #controls {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 10px;
+            display: flex;
+            gap: 15px;
+            z-index: 100;
+            backdrop-filter: blur(5px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        input {
+            padding: 8px 12px;
+            border: none;
+            border-radius: 5px;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            font-size: 14px;
+        }
+
+        /* Hide spinner buttons for number input */
+        input[type="number"]::-webkit-inner-spin-button,
+        input[type="number"]::-webkit-outer-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+
+        input::placeholder {
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        input:focus {
+            outline: none;
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        button {
+            padding: 8px 20px;
+            border: none;
+            border-radius: 5px;
+            background-color: rgba(76, 175, 80, 0.3);
+            color: white;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.3s;
+        }
+
+        button:hover {
+            background-color: rgba(76, 175, 80, 0.6);
+        }
+    </style>
+</head>
+<body>
+    <div id="marquee-container">
+        <div id="marquee-text"></div>
+    </div>
+    <div id="controls">
+        <input type="text" id="text-input" placeholder="Please input text">
+        <input type="number" id="speed-input" value="200" min="1" max="5000">
+        <button onclick="updateMarquee()">Update</button>
+    </div>
+
+    <script>
+        let marqueeSpeed = 200; // pixels per second
+
+        function updateMarquee() {
+            const text = document.getElementById('text-input').value || 'Example Text';
+            const speed = parseInt(document.getElementById('speed-input').value) || marqueeSpeed;
+            
+            const marqueeText = document.getElementById('marquee-text');
+            marqueeText.textContent = text;
+            
+            // Calculate animation duration based on text width
+            const textWidth = marqueeText.offsetWidth;
+            const duration = (textWidth + window.innerWidth) / speed;
+            marqueeText.style.animationDuration = `${duration}s`;
+        }
+
+        // Initial setup
+        updateMarquee();
+
+        // Update on window resize
+        window.addEventListener('resize', updateMarquee);
+    </script>
+</body>
+</html> 

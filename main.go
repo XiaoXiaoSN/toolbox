@@ -44,6 +44,8 @@ func main() {
 			io.WriteString(w, "Hello world!!")
 		})
 
+		r.HandleFunc("/marquee", marqueeStaticPage).Methods(http.MethodGet)
+
 		r.HandleFunc("/pb", pbStaticPage).Methods(http.MethodGet)
 		r.HandleFunc("/api/v1/pb", getPB).Methods(http.MethodGet)
 		r.HandleFunc("/api/v1/pb", setPB).Methods(http.MethodPost)

@@ -26,6 +26,21 @@ func writeError(w http.ResponseWriter, status int, message string) {
 }
 
 // **************************************************
+// route: /marquee
+// marquee static HTTP page
+// **************************************************
+
+func marqueeStaticPage(w http.ResponseWriter, r *http.Request) {
+	body, err := os.ReadFile("public/marquee.html")
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "Failed to read static file")
+		return
+	}
+	w.Header().Set("Content-Type", "text/html")
+	w.Write(body)
+}
+
+// **************************************************
 // route: /pb
 // paste static HTTP page
 // **************************************************
