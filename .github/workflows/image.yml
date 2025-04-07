@@ -1,41 +1,58 @@
-name: build our image
+name: Build and Push Docker Image
 
 on:
   push:
-    branches:
-      - master
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      security-events: write
+
     steps:
-      - name: install Go
-        uses: actions/setup-go@v1
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
         with:
-          go-version: ${{ matrix.go-version }}
+          go-version: '1.21'
+          cache: true
 
-      - name: check out path
-        uses: actions/checkout@v2
+      - name: Run tests
+        run: go test -v -race ./...
 
-      - name: testing
-        run: go test ./...
-
-      - name: install buildx
-        id: buildx
-        uses: crazy-max/ghaction-docker-buildx@v1
+      - name: Run Gosec Security Scanner
+        uses: securego/gosec@master
         with:
-          version: latest
+          args: ./...
 
-      - name: login to docker hub
-        uses: docker/login-action@v1
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: build image
-        run: |
-          docker buildx build \
-            --push \
-            --tag xiaoxiaosn/toolbox:latest \
-            --platform linux/amd64,linux/arm64,linux/arm/v7,linux/arm/v6  .
-
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64,linux/arm/v7,linux/arm/v6
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: |
+            xiaoxiaosn/toolbox:latest
+            xiaoxiaosn/toolbox:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
