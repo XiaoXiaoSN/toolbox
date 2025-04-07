@@ -1,4 +1,5 @@
-version: '3.1'
+version: '3'
+
 services:
   redis:
     image: redis
@@ -11,4 +12,4 @@ services:
     ports:
       - 23040:8000
     depends_on:
-        - "redis"
+      - redis
