@@ -1,2 +1,7 @@
 # ToolBox
-![build image](https://github.com/XiaoXiaoSN/toolbox/workflows/Build%20and%20Push%20Docker%20Image/badge.svg?branch=master)
+
+[![Build and Push Docker Image](https://github.com/XiaoXiaoSN/toolbox/actions/workflows/image.yml/badge.svg)](https://github.com/XiaoXiaoSN/toolbox/actions/workflows/image.yml)
+
+## Ref
+
+https://github.com/XiaoXiaoSN/magic-box
