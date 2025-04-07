@@ -4,14 +4,26 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
+	"strings"
 
 	"github.com/go-redis/redis/v8"
 	"github.com/gorilla/mux"
 )
+
+// ErrorResponse represents an error response
+type ErrorResponse struct {
+	Error string `json:"error"`
+}
+
+// writeError writes an error response
+func writeError(w http.ResponseWriter, status int, message string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(ErrorResponse{Error: message})
+}
 
 // **************************************************
 // route: /pb
@@ -19,23 +31,19 @@ import (
 // **************************************************
 
 func pbStaticPage(w http.ResponseWriter, r *http.Request) {
-	body, _ := ioutil.ReadFile("public/pb.html")
-	io.WriteString(w, string(body))
+	body, err := os.ReadFile("public/pb.html")
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "Failed to read static file")
+		return
+	}
+	w.Header().Set("Content-Type", "text/html")
+	w.Write(body)
 }
 
 // **************************************************
 // route: /api/v1/pb
 // paste board
 // **************************************************
-
-func pbHandler(w http.ResponseWriter, r *http.Request) {
-	switch r.Method {
-	case http.MethodGet:
-		getPB(w, r)
-	case http.MethodPost:
-		setPB(w, r)
-	}
-}
 
 type pbStruct struct {
 	Text string `json:"text"`
@@ -45,39 +53,40 @@ func getPB(w http.ResponseWriter, r *http.Request) {
 	ctx := context.Background()
 
 	result, err := redisClient.Get(ctx, "pb").Result()
+	if err == redis.Nil {
+		writeError(w, http.StatusNotFound, "No content found")
+		return
+	}
 	if err != nil {
-		log.Println(err)
-		w.WriteHeader(http.StatusInternalServerError)
+		log.Printf("Redis error: %v", err)
+		writeError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
 
 	pb := pbStruct{Text: result}
-	pbBytes, err := json.Marshal(pb)
-	if err != nil {
-		log.Println(err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
-	io.WriteString(w, string(pbBytes))
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(pb)
 }
 
 func setPB(w http.ResponseWriter, r *http.Request) {
 	ctx := context.Background()
-	decoder := json.NewDecoder(r.Body)
 
 	var pb pbStruct
-	err := decoder.Decode(&pb)
-	if err != nil {
-		log.Println(err)
-		w.WriteHeader(http.StatusInternalServerError)
+	if err := json.NewDecoder(r.Body).Decode(&pb); err != nil {
+		writeError(w, http.StatusBadRequest, "Invalid JSON payload")
 		return
 	}
 
-	err = redisClient.Set(ctx, "pb", pb.Text, 0).Err()
+	// Validate text length
+	if len(pb.Text) > 10000 {
+		writeError(w, http.StatusBadRequest, "Text too long")
+		return
+	}
+
+	err := redisClient.Set(ctx, "pb", pb.Text, 0).Err()
 	if err != nil {
-		log.Println(err)
-		w.WriteHeader(http.StatusInternalServerError)
+		log.Printf("Redis error: %v", err)
+		writeError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
 
@@ -89,20 +98,6 @@ func setPB(w http.ResponseWriter, r *http.Request) {
 // power for shorten url
 // **************************************************
 
-func shortenURLHandler(w http.ResponseWriter, r *http.Request) {
-	switch r.Method {
-	case http.MethodPost:
-		setShortenURL(w, r)
-		return
-	case http.MethodGet:
-		listShortenURL(w, r)
-		return
-	case http.MethodDelete:
-		deleteShortenURL(w, r)
-		return
-	}
-}
-
 type sURLRequest struct {
 	URL     string `json:"url"`
 	Shorten string `json:"shorten"`
@@ -110,41 +105,34 @@ type sURLRequest struct {
 
 func setShortenURL(w http.ResponseWriter, r *http.Request) {
 	ctx := context.Background()
-	decoder := json.NewDecoder(r.Body)
 
 	var sURL sURLRequest
-	err := decoder.Decode(&sURL)
-	if err != nil {
-		log.Println(err)
-		w.WriteHeader(http.StatusInternalServerError)
+	if err := json.NewDecoder(r.Body).Decode(&sURL); err != nil {
+		writeError(w, http.StatusBadRequest, "Invalid JSON payload")
 		return
 	}
 
-	if sURL.URL == "" {
-		w.WriteHeader(http.StatusBadRequest)
+	// Validate URL
+	if !validateURL(sURL.URL) {
+		writeError(w, http.StatusBadRequest, "Invalid URL")
 		return
 	}
+
+	// Validate or generate shorten
 	if sURL.Shorten == "" {
 		sURL.Shorten = randStr(4)
 	}
 
 	key := fmt.Sprintf("sURL.%s", sURL.Shorten)
-	err = redisClient.Set(ctx, key, sURL.URL, 0).Err()
+	err := redisClient.Set(ctx, key, sURL.URL, 0).Err()
 	if err != nil {
-		log.Println(err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
-	resp, err := json.Marshal(sURL)
-	if err != nil {
-		log.Println(err)
-		w.WriteHeader(http.StatusInternalServerError)
+		log.Printf("Redis error: %v", err)
+		writeError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	w.Write(resp)
+	json.NewEncoder(w).Encode(sURL)
 }
 
 func getShortenURL(w http.ResponseWriter, r *http.Request) {
@@ -152,19 +140,19 @@ func getShortenURL(w http.ResponseWriter, r *http.Request) {
 
 	shorten, ok := mux.Vars(r)["shorten"]
 	if !ok {
-		io.WriteString(w, "404 - not found")
-		w.WriteHeader(http.StatusNotFound)
+		writeError(w, http.StatusNotFound, "Not found")
 		return
 	}
 
 	key := fmt.Sprintf("sURL.%s", shorten)
 	shortenURL, err := redisClient.Get(ctx, key).Result()
 	if err == redis.Nil {
-		io.WriteString(w, "404 - not found")
-		w.WriteHeader(http.StatusNotFound)
+		writeError(w, http.StatusNotFound, "Not found")
 		return
-	} else if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
+	}
+	if err != nil {
+		log.Printf("Redis error: %v", err)
+		writeError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
 
@@ -182,51 +170,36 @@ func listShortenURL(w http.ResponseWriter, r *http.Request) {
 	sURLList := make([]sURLResponse, 0)
 
 	var cursor uint64
-	var n int
 	for {
-		var keys []string
-		var err error
-
-		keys, cursor, err = redisClient.Scan(ctx, cursor, "sURL.*", 20).Result()
+		keys, nextCursor, err := redisClient.Scan(ctx, cursor, "sURL.*", 20).Result()
 		if err != nil {
-			io.WriteString(w, "500 - redis error")
-			w.WriteHeader(http.StatusInternalServerError)
+			log.Printf("Redis error: %v", err)
+			writeError(w, http.StatusInternalServerError, "Internal server error")
 			return
 		}
-		n += len(keys)
 
-		var targetURL string
 		for _, key := range keys {
-			targetURL, err = redisClient.Get(ctx, key).Result()
-			if err == redis.Nil {
-				io.WriteString(w, "404 - not found")
-				w.WriteHeader(http.StatusNotFound)
-				return
-			} else if err != nil {
-				io.WriteString(w, "500 - redis error")
-				w.WriteHeader(http.StatusInternalServerError)
-				return
+			targetURL, err := redisClient.Get(ctx, key).Result()
+			if err != nil {
+				log.Printf("Redis error: %v", err)
+				continue
 			}
 
+			shorten := strings.TrimPrefix(key, "sURL.")
 			sURLList = append(sURLList, sURLResponse{
 				URL:     targetURL,
-				Shorten: key,
+				Shorten: shorten,
 			})
 		}
+
+		cursor = nextCursor
 		if cursor == 0 {
 			break
 		}
 	}
 
-	resp, err := json.Marshal(sURLList)
-	if err != nil {
-		log.Println(err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
 	w.Header().Set("Content-Type", "application/json")
-	w.Write(resp)
+	json.NewEncoder(w).Encode(sURLList)
 }
 
 func deleteShortenURL(w http.ResponseWriter, r *http.Request) {
@@ -234,21 +207,21 @@ func deleteShortenURL(w http.ResponseWriter, r *http.Request) {
 
 	shorten, ok := mux.Vars(r)["shorten"]
 	if !ok {
-		io.WriteString(w, "404 - not found")
-		w.WriteHeader(http.StatusNotFound)
+		writeError(w, http.StatusNotFound, "Not found")
 		return
 	}
 
 	key := fmt.Sprintf("sURL.%s", shorten)
-	_, err := redisClient.Del(ctx, key).Result()
-	if err == redis.Nil {
-		io.WriteString(w, "404 - not found")
-		w.WriteHeader(http.StatusNotFound)
+	result, err := redisClient.Del(ctx, key).Result()
+	if err != nil {
+		log.Printf("Redis error: %v", err)
+		writeError(w, http.StatusInternalServerError, "Internal server error")
 		return
-	} else if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
+	}
+	if result == 0 {
+		writeError(w, http.StatusNotFound, "Not found")
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
+	w.WriteHeader(http.StatusNoContent)
 }

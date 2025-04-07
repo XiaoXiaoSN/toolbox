@@ -1,26 +1,36 @@
 package main
 
 import (
-	"math/rand"
-	"time"
+	"crypto/rand"
+	"encoding/base64"
+	"math/big"
+	"net/url"
 )
 
-var (
-	lowerLetters = "abcdefghijklmnopqrstuvwxyz"
-	upperLetters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-	numbers      = "1234567890"
-)
+// randStr generates a cryptographically secure random string
+func randStr(n int) string {
+	const letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	result := make([]byte, n)
 
-func init() {
-	rand.Seed(time.Now().UnixNano())
+	for i := 0; i < n; i++ {
+		num, err := rand.Int(rand.Reader, big.NewInt(int64(len(letters))))
+		if err != nil {
+			// Fallback to base64 if crypto/rand fails
+			b := make([]byte, n)
+			_, err := rand.Read(b)
+			if err != nil {
+				panic(err) // This should never happen
+			}
+			return base64.URLEncoding.EncodeToString(b)[:n]
+		}
+		result[i] = letters[num.Int64()]
+	}
+
+	return string(result)
 }
 
-func randStr(n int) string {
-	letters := []rune(lowerLetters + upperLetters + numbers)
-
-	b := make([]rune, n)
-	for i := range b {
-		b[i] = letters[rand.Intn(len(letters))]
-	}
-	return string(b)
+// validateURL validates if a string is a valid URL
+func validateURL(input string) bool {
+	u, err := url.Parse(input)
+	return err == nil && u.Scheme != "" && u.Host != ""
 }

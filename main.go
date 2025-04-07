@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/go-redis/redis/v8"
 	"github.com/gorilla/mux"
@@ -44,7 +45,8 @@ func main() {
 		})
 
 		r.HandleFunc("/pb", pbStaticPage).Methods(http.MethodGet)
-		r.HandleFunc("/api/v1/pb", pbHandler)
+		r.HandleFunc("/api/v1/pb", getPB).Methods(http.MethodGet)
+		r.HandleFunc("/api/v1/pb", setPB).Methods(http.MethodPost)
 
 		r.HandleFunc("/api/v1/surl", listShortenURL).Methods(http.MethodGet)
 		r.HandleFunc("/api/v1/surl", setShortenURL).Methods(http.MethodPost)
@@ -52,14 +54,30 @@ func main() {
 		r.HandleFunc("/{shorten}", getShortenURL)
 	}
 
-	// cors.Default() setup the middleware with default options being
-	// all origins accepted with simple methods (GET, POST). See
-	// documentation below for more options.
-	handler := cors.Default().Handler(r)
+	// Configure CORS with more restrictive settings
+	corsHandler := cors.New(cors.Options{
+		AllowedOrigins:   []string{"*"}, // In production, replace with specific origins
+		AllowedMethods:   []string{"GET", "POST", "DELETE"},
+		AllowedHeaders:   []string{"Content-Type", "Authorization"},
+		ExposedHeaders:   []string{},
+		MaxAge:           300,
+		AllowCredentials: false,
+	})
+
+	handler := corsHandler.Handler(r)
+
+	// Configure HTTP server with timeouts
+	server := &http.Server{
+		Addr:         httpPort,
+		Handler:      handler,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
+
 	log.Printf("http service on %s\n", httpPort)
 
-	err := http.ListenAndServe(httpPort, handler)
-	if err != nil {
+	if err := server.ListenAndServe(); err != nil {
 		log.Printf("http.ListenAndServe failed: %+v", err)
 	}
 }
