@@ -22,7 +22,10 @@ type ErrorResponse struct {
 func writeError(w http.ResponseWriter, status int, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(ErrorResponse{Error: message})
+	if err := json.NewEncoder(w).Encode(ErrorResponse{Error: message}); err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
 }
 
 // **************************************************
@@ -37,7 +40,10 @@ func marqueeStaticPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "text/html")
-	w.Write(body)
+	if _, err := w.Write(body); err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
 }
 
 // **************************************************
@@ -52,7 +58,10 @@ func pbStaticPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "text/html")
-	w.Write(body)
+	if _, err := w.Write(body); err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
 }
 
 // **************************************************
@@ -80,7 +89,10 @@ func getPB(w http.ResponseWriter, r *http.Request) {
 
 	pb := pbStruct{Text: result}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(pb)
+	if err := json.NewEncoder(w).Encode(pb); err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
 }
 
 func setPB(w http.ResponseWriter, r *http.Request) {
@@ -147,7 +159,10 @@ func setShortenURL(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(sURL)
+	if err := json.NewEncoder(w).Encode(sURL); err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
 }
 
 func getShortenURL(w http.ResponseWriter, r *http.Request) {
@@ -214,7 +229,10 @@ func listShortenURL(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(sURLList)
+	if err := json.NewEncoder(w).Encode(sURLList); err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
 }
 
 func deleteShortenURL(w http.ResponseWriter, r *http.Request) {

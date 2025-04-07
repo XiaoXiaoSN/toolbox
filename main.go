@@ -41,7 +41,10 @@ func main() {
 	r := mux.NewRouter()
 	{
 		r.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-			io.WriteString(w, "Hello world!!")
+			if _, err := io.WriteString(w, "Hello world!!"); err != nil {
+				http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+				return
+			}
 		})
 
 		r.HandleFunc("/marquee", marqueeStaticPage).Methods(http.MethodGet)
