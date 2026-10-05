@@ -59,7 +59,7 @@ class SqlTests(unittest.TestCase):
         for name, args in [("get_link", ("a",)), ("list_links", ("a", 100))]:
             sql = (ROOT / f"sql/{name}.sql").read_text()
             plan = str(self.db.execute("EXPLAIN QUERY PLAN " + sql, args).fetchall())
-            self.assertIn("SEARCH short_links USING PRIMARY KEY", plan)
+            self.assertIn("SEARCH short_links USING INDEX sqlite_autoindex_short_links_1", plan)
 
 
 if __name__ == "__main__":

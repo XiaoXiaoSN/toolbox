@@ -10,4 +10,4 @@ CREATE TABLE short_links (
     CHECK (shorten NOT GLOB '*[^A-Za-z0-9_-]*'),
     CHECK (lower(shorten) NOT IN ('api', 'pb', 'marquee', 'surl', 'assets', 'index', 'healthz')),
     CHECK (length(CAST(url AS BLOB)) BETWEEN 1 AND 8192)
-) STRICT, WITHOUT ROWID;
+) STRICT;
