@@ -42,7 +42,9 @@ async fn fetch(mut request: Request, env: Env, _ctx: Context) -> worker::Result<
     response
         .headers_mut()
         .set("X-Content-Type-Options", "nosniff")?;
-    response.headers_mut().set("Referrer-Policy", "no-referrer")?;
+    response
+        .headers_mut()
+        .set("Referrer-Policy", "no-referrer")?;
     if response.status_code() == 401 {
         response.headers_mut().set("WWW-Authenticate", "Bearer")?;
     }
@@ -191,7 +193,10 @@ async fn put_link(request: &mut Request, env: &Env) -> ApiResult<Response> {
             return Err(ApiError::Client(400, "Invalid or reserved short code"));
         }
         db.prepare(include_str!("../sql/upsert_link.sql"))
-            .bind(&[JsValue::from_str(&link.shorten), JsValue::from_str(&link.url)])?
+            .bind(&[
+                JsValue::from_str(&link.shorten),
+                JsValue::from_str(&link.url),
+            ])?
             .run()
             .await?;
         return Ok(Response::from_json(&link)?);
@@ -199,18 +204,25 @@ async fn put_link(request: &mut Request, env: &Env) -> ApiResult<Response> {
     // Collisions retry an atomic INSERT, never an overwrite or a read-then-write.
     for _ in 0..8 {
         let mut bytes = [0; 8];
-        getrandom::fill(&mut bytes).map_err(|_| ApiError::Client(503, "Random source unavailable"))?;
+        getrandom::fill(&mut bytes)
+            .map_err(|_| ApiError::Client(503, "Random source unavailable"))?;
         link.shorten = domain::random_code(bytes);
         let inserted = db
             .prepare(include_str!("../sql/insert_link.sql"))
-            .bind(&[JsValue::from_str(&link.shorten), JsValue::from_str(&link.url)])?
+            .bind(&[
+                JsValue::from_str(&link.shorten),
+                JsValue::from_str(&link.url),
+            ])?
             .first::<String>(Some("shorten"))
             .await?;
         if inserted.is_some() {
             return Ok(Response::from_json(&link)?);
         }
     }
-    Err(ApiError::Client(503, "Could not allocate a short code; retry"))
+    Err(ApiError::Client(
+        503,
+        "Could not allocate a short code; retry",
+    ))
 }
 
 async fn list_links(request: &Request, env: &Env) -> ApiResult<Response> {
@@ -229,9 +241,7 @@ async fn list_links(request: &Request, env: &Env) -> ApiResult<Response> {
     let more = links.len() > page.limit;
     links.truncate(page.limit);
     let mut response = Response::from_json(&links)?;
-    if more
-        && let Some(last) = links.last()
-    {
+    if more && let Some(last) = links.last() {
         response.headers_mut().set("X-Next-Cursor", &last.shorten)?;
     }
     Ok(response)
