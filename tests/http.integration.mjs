@@ -49,10 +49,16 @@ await test('real Worker, D1 and Static Assets contract', async (t) => {
   });
 
   await t.test('limits both fixed-length and chunked bodies', async () => {
-    assert.equal((await post('/api/v1/pb', { text: 'x'.repeat(70000) })).status, 413);
+    // Rejected bodies can terminate the dev proxy's HTTP/1.1 connection.
+    // Do not pool these intentionally aborted uploads with normal API traffic.
+    const headers = { Connection: 'close' };
+    const fixed = await call('/api/v1/pb', { method: 'POST', headers, body: JSON.stringify({ text: 'x'.repeat(70000) }) });
+    assert.equal(fixed.status, 413);
+    await fixed.text();
     const body = new ReadableStream({ start(controller) { controller.enqueue(new TextEncoder().encode('x'.repeat(70000))); controller.close(); } });
-    const response = await call('/api/v1/pb', { method: 'POST', body, duplex: 'half' });
+    const response = await call('/api/v1/pb', { method: 'POST', headers, body, duplex: 'half' });
     assert.equal(response.status, 413);
+    await response.text();
   });
 
   await t.test('custom codes update and deletion removes redirects immediately', async () => {
