@@ -40,16 +40,26 @@ async fn fetch(mut request: Request, env: Env, _ctx: Context) -> worker::Result<
         }
     };
     response.headers_mut().set("Cache-Control", "no-store")?;
-    response.headers_mut().set("X-Content-Type-Options", "nosniff")?;
-    response.headers_mut().set("Referrer-Policy", "no-referrer")?;
+    response
+        .headers_mut()
+        .set("X-Content-Type-Options", "nosniff")?;
+    response
+        .headers_mut()
+        .set("Referrer-Policy", "no-referrer")?;
     if response.status_code() == 401 {
         response.headers_mut().set("WWW-Authenticate", "Bearer")?;
     }
     if is_api {
         let headers = response.headers_mut();
         headers.set("Access-Control-Allow-Origin", "*")?;
-        headers.set("Access-Control-Allow-Headers", "Authorization, Content-Type")?;
-        headers.set("Access-Control-Allow-Methods", "GET, HEAD, POST, DELETE, OPTIONS")?;
+        headers.set(
+            "Access-Control-Allow-Headers",
+            "Authorization, Content-Type",
+        )?;
+        headers.set(
+            "Access-Control-Allow-Methods",
+            "GET, HEAD, POST, DELETE, OPTIONS",
+        )?;
         headers.set("Access-Control-Expose-Headers", "X-Next-Cursor")?;
     }
     if is_head {
@@ -120,7 +130,10 @@ fn authenticate(request: &Request, env: &Env) -> ApiResult<()> {
         return Ok(());
     }
     if secret.len() < 32 {
-        return Err(ApiError::Client(503, "API_TOKEN must contain at least 32 bytes"));
+        return Err(ApiError::Client(
+            503,
+            "API_TOKEN must contain at least 32 bytes",
+        ));
     }
     let header = request.headers().get("Authorization")?;
     if !domain::authorised(header.as_deref(), &secret) {
@@ -198,7 +211,10 @@ async fn put_link(request: &mut Request, env: &Env) -> ApiResult<Response> {
         }
         let saved = db
             .prepare(include_str!("../sql/upsert_link.sql"))
-            .bind(&[JsValue::from_str(&link.shorten), JsValue::from_str(&link.url)])?
+            .bind(&[
+                JsValue::from_str(&link.shorten),
+                JsValue::from_str(&link.url),
+            ])?
             .first::<ShortLink>(None)
             .await?
             .ok_or(ApiError::Client(500, "Short link was not saved"))?;
@@ -212,14 +228,20 @@ async fn put_link(request: &mut Request, env: &Env) -> ApiResult<Response> {
         link.shorten = domain::random_code(bytes);
         let inserted = db
             .prepare(include_str!("../sql/insert_link.sql"))
-            .bind(&[JsValue::from_str(&link.shorten), JsValue::from_str(&link.url)])?
+            .bind(&[
+                JsValue::from_str(&link.shorten),
+                JsValue::from_str(&link.url),
+            ])?
             .first::<String>(Some("shorten"))
             .await?;
         if inserted.is_some() {
             return Ok(Response::from_json(&link)?);
         }
     }
-    Err(ApiError::Client(503, "Could not allocate a short code; retry"))
+    Err(ApiError::Client(
+        503,
+        "Could not allocate a short code; retry",
+    ))
 }
 
 async fn list_links(request: &Request, env: &Env) -> ApiResult<Response> {
