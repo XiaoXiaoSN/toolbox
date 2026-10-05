@@ -48,19 +48,6 @@ await test('real Worker, D1 and Static Assets contract', async (t) => {
     assert.equal(await (await call('/api/v1/pb', { method: 'HEAD' })).text(), '');
   });
 
-  await t.test('limits both fixed-length and chunked bodies', async () => {
-    // Rejected bodies can terminate the dev proxy's HTTP/1.1 connection.
-    // Do not pool these intentionally aborted uploads with normal API traffic.
-    const headers = { Connection: 'close' };
-    const fixed = await call('/api/v1/pb', { method: 'POST', headers, body: JSON.stringify({ text: 'x'.repeat(70000) }) });
-    assert.equal(fixed.status, 413);
-    await fixed.text();
-    const body = new ReadableStream({ start(controller) { controller.enqueue(new TextEncoder().encode('x'.repeat(70000))); controller.close(); } });
-    const response = await call('/api/v1/pb', { method: 'POST', headers, body, duplex: 'half' });
-    assert.equal(response.status, 413);
-    await response.text();
-  });
-
   await t.test('custom codes update and deletion removes redirects immediately', async () => {
     for (const url of ['https://example.com/first', 'https://example.com/second']) {
       const created = await post('/api/v1/surl', { url, shorten: 'custom' });
@@ -112,5 +99,20 @@ await test('real Worker, D1 and Static Assets contract', async (t) => {
     assert.equal(codes.length, 24);
     assert.equal(new Set(codes).size, 24);
     for (const limit of [0, 1001, 'bad']) assert.equal((await call(`/api/v1/surl?limit=${limit}`)).status, 400);
+  });
+
+  // Run transport-abort cases after normal API cases: Wrangler's upstream dev
+  // proxy can retain a closed socket briefly after rejecting a streaming body.
+  await t.test('limits both fixed-length and chunked bodies', async () => {
+    // Rejected bodies can terminate the dev proxy's HTTP/1.1 connection.
+    // Do not pool these intentionally aborted uploads with normal API traffic.
+    const headers = { Connection: 'close' };
+    const fixed = await call('/api/v1/pb', { method: 'POST', headers, body: JSON.stringify({ text: 'x'.repeat(70000) }) });
+    assert.equal(fixed.status, 413);
+    await fixed.text();
+    const body = new ReadableStream({ start(controller) { controller.enqueue(new TextEncoder().encode('x'.repeat(70000))); controller.close(); } });
+    const response = await call('/api/v1/pb', { method: 'POST', headers, body, duplex: 'half' });
+    assert.equal(response.status, 413);
+    await response.text();
   });
 });
