@@ -120,10 +120,7 @@ fn authenticate(request: &Request, env: &Env) -> ApiResult<()> {
         return Ok(());
     }
     if secret.len() < 32 {
-        return Err(ApiError::Client(
-            503,
-            "API_TOKEN must contain at least 32 bytes",
-        ));
+        return Err(ApiError::Client(503, "API_TOKEN must contain at least 32 bytes"));
     }
     let header = request.headers().get("Authorization")?;
     if !domain::authorised(header.as_deref(), &secret) {
