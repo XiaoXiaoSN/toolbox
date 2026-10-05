@@ -25,6 +25,7 @@ struct ErrorBody {
 #[event(fetch)]
 async fn fetch(mut request: Request, env: Env, _ctx: Context) -> worker::Result<Response> {
     let is_head = request.method() == Method::Head;
+    let is_api = request.path().starts_with("/api/");
     let mut response = match dispatch(&mut request, &env).await {
         Ok(response) => response,
         Err(ApiError::Client(status, error)) => {
@@ -47,6 +48,16 @@ async fn fetch(mut request: Request, env: Env, _ctx: Context) -> worker::Result<
         .set("Referrer-Policy", "no-referrer")?;
     if response.status_code() == 401 {
         response.headers_mut().set("WWW-Authenticate", "Bearer")?;
+    }
+    if is_api {
+        let headers = response.headers_mut();
+        headers.set("Access-Control-Allow-Origin", "*")?;
+        headers.set("Access-Control-Allow-Headers", "Authorization, Content-Type")?;
+        headers.set(
+            "Access-Control-Allow-Methods",
+            "GET, HEAD, POST, DELETE, OPTIONS",
+        )?;
+        headers.set("Access-Control-Expose-Headers", "X-Next-Cursor")?;
     }
     if is_head {
         response = Response::empty()?
@@ -107,11 +118,14 @@ async fn dispatch(request: &mut Request, env: &Env) -> ApiResult<Response> {
 }
 
 fn authenticate(request: &Request, env: &Env) -> ApiResult<()> {
-    // Missing or weak configuration must never turn authentication off.
-    let secret = env
-        .secret("API_TOKEN")
-        .map_err(|_| ApiError::Client(503, "API_TOKEN is not configured"))?
-        .to_string();
+    // Public API by default; deployments opt in by setting a non-empty token.
+    let Ok(secret) = env.secret("API_TOKEN") else {
+        return Ok(());
+    };
+    let secret = secret.to_string();
+    if secret.is_empty() {
+        return Ok(());
+    }
     if secret.len() < 32 {
         return Err(ApiError::Client(
             503,

@@ -28,18 +28,24 @@ async function list(append = false) {
   element('more').hidden = !cursor;
 }
 
+async function connect() {
+  await list();
+  element('create').hidden = false;
+  element('connect').hidden = true;
+}
+
 async function run(action) {
   if (busy) return;
   busy = true;
   status.textContent = '處理中…';
   try { await action(); status.textContent = '完成。'; }
-  catch (error) { status.textContent = error.message; }
+  catch (error) { status.textContent = error.message; element('connect').hidden = false; }
   finally { busy = false; }
 }
 element('connect').addEventListener('submit', (event) => {
   event.preventDefault();
   setToken(element('token').value);
-  void run(async () => { await list(); element('create').hidden = false; element('connect').hidden = true; });
+  void run(connect);
 });
 element('create').addEventListener('submit', (event) => {
   event.preventDefault();
@@ -50,3 +56,5 @@ element('create').addEventListener('submit', (event) => {
   });
 });
 element('more').addEventListener('click', () => run(() => list(true)));
+
+void run(connect);

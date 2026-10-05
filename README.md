@@ -2,6 +2,8 @@
 
 全新實作的個人工具箱：跨裝置剪貼簿、全螢幕跑馬燈、短網址。後端使用 Rust 2024 → WebAssembly，資料使用 D1，網頁由 Workers Static Assets 提供。沒有 Go、Redis、Docker、前端框架或第三方 CDN。舊實作只保留在 Git 歷史中。
 
+主要客戶端是開源、公開的 Magic Box，因此 **API 預設公開，驗證僅為部署者可選的功能**；公開客戶端不需要內嵌共用 secret。
+
 ## 架構與效能
 
 - `/`、`/pb`、`/marquee`、`/surl` 及 JS/CSS 採 assets-first，不執行 Rust Worker。API 強制先進 Worker，其他找不到靜態檔案的路徑再處理短網址。
@@ -22,7 +24,7 @@ npm run db:local
 npm run dev
 ```
 
-開啟 `http://localhost:8787`，剪貼簿與短網址管理頁輸入 `.dev.vars` 的 token。跑馬燈不需要 API 或 token。`wrangler.json` 的全零 D1 UUID 是本機設定，不是真實資料庫；本機不需要 Cloudflare 登入。
+開啟 `http://localhost:8787`，剪貼簿與短網址管理頁會直接載入，不必填 token。`.dev.vars.example` 預設不設定 `API_TOKEN`；只有需要測試驗證模式時才取消該行註解。跑馬燈不需要 API 或 token。`wrangler.json` 的全零 D1 UUID 是本機設定，不是真實資料庫；本機不需要 Cloudflare 登入。
 
 `worker`、`worker-build` 固定 0.8.7，Wrangler 固定 4.147.0。初次 `npm install` / `cargo test` 會產生 dependency lockfiles；目前沒有預先生成並提交的 lockfiles，其他相依套件仍依 manifest 範圍解析。CI 將解析後的 lockfiles 與 Wasm 放入 artifact，供檢查及後續鎖定。
 
@@ -37,22 +39,35 @@ npx wrangler d1 create toolbox
 npm run configure -- YOUR_D1_DATABASE_UUID
 # 檢查產生的 wrangler.production.json，必要時修改 Worker 名稱。
 npm run deploy
-# 互動式貼入至少 32 bytes 的高熵隨機 token；不要使用本機範例值。
-npx wrangler secret put API_TOKEN --config wrangler.production.json
 ```
 
-`configure` 只建立被 Git 忽略的 `wrangler.production.json`，拒絕全零 UUID，也不覆寫既有設定。`deploy` 先套用遠端 migration，成功才 build/deploy Worker；部署初期還沒設定 secret 時，管理 API 回 503，而非公開存取。後續重新部署會保留已設定的 Worker secret。
+`configure` 只建立被 Git 忽略的 `wrangler.production.json`，拒絕全零 UUID，也不覆寫既有設定。`deploy` 先套用遠端 migration，成功才 build/deploy Worker。全新部署未設定 `API_TOKEN` 時即為公開 API；不需要額外的登入或 secret 設定。後續重新部署會保留已設定的 Worker secret，不會自動解除既有驗證。
+
+### 可選的 API 驗證
+
+不設定 `API_TOKEN` 或設為空字串時，所有 API 讀寫皆公開。有設定非空 token 才啟用 Bearer 驗證；保留原本至少 32 bytes 的設定要求，設定過短回 503，而不是意外變成公開模式。
+
+```sh
+# 選用：啟用驗證，互動式輸入高熵隨機 token；不要使用本機範例值。
+npx wrangler secret put API_TOKEN --config wrangler.production.json
+
+# 已設定過 secret、要恢復公開 API 時才執行；此指令會立即部署變更。
+npx wrangler secret delete API_TOKEN --config wrangler.production.json
+```
+
+本機恢復公開模式則移除 `.dev.vars` 的 `API_TOKEN` 或設成 `API_TOKEN=""`。若在 Wrangler 的 `vars` 另有設定，也需移除。公開 Magic Box 不需要設定 token，也不要把私人部署的 token 寫入公開客戶端。
 
 預設使用 Cloudflare 提供的 `workers.dev` 網域。自訂網域請在 Worker 設定中另行綁定；網域、D1 建立、DNS 切換都不會由 CI 擅自執行。部署只使用 Workers / Static Assets / D1，不需要 Redis，也不啟用付費專屬功能；是否維持 $0 仍取決於帳號方案和使用量。
 
 ## API
 
-除公開轉址和 `/healthz` 外，管理 API 一律需要：
+預設不需要 `Authorization`。POST 使用 `Content-Type: application/json`；只有部署者啟用驗證時，API 請求才需要額外傳入：
 
 ```http
 Authorization: Bearer YOUR_API_TOKEN
-Content-Type: application/json
 ```
+
+API 支援公開跨來源 CORS：`Access-Control-Allow-Origin: *`，允許 GET、HEAD、POST、DELETE、OPTIONS，以及 `Content-Type` / `Authorization` headers；回應也暴露 `X-Next-Cursor`，Magic Box 可跨網域讀取分頁游標。OPTIONS 不需要 token；啟用驗證時，實際 API 請求仍會驗證 token。瀏覽器請求不使用 cookie credentials。
 
 | Method | Path | 行為 |
 | --- | --- | --- |
@@ -73,12 +88,11 @@ Content-Type: application/json
 清單預設 100 筆，上限 1,000 筆。還有下一頁時，回應的 `X-Next-Cursor` 是最後一筆短碼；將它作為下一次 `after`，直到沒有此 header。資料列仍是陣列，不包新的 envelope。分頁不是跨多個請求的資料快照；匯出時請暫停其他寫入。
 
 ```sh
-# TOKEN / BASE 請先在你的 shell 設定，以下不會把 secret 寫進 repo。
-curl -H "Authorization: Bearer $TOKEN" "$BASE/api/v1/pb"
-curl -X POST -H "Authorization: Bearer $TOKEN" \
-  -H 'Content-Type: application/json' -d '{"text":"台灣"}' "$BASE/api/v1/pb"
-curl -X POST -H "Authorization: Bearer $TOKEN" \
-  -H 'Content-Type: application/json' \
+# BASE 請先在你的 shell 設定為部署網址；公開模式不需要 TOKEN。
+curl "$BASE/api/v1/pb"
+curl -X POST -H 'Content-Type: application/json' \
+  -d '{"text":"台灣"}' "$BASE/api/v1/pb"
+curl -X POST -H 'Content-Type: application/json' \
   -d '{"url":"https://example.com/","shorten":"example"}' "$BASE/api/v1/surl"
 curl -I "$BASE/example"
 ```
@@ -87,13 +101,13 @@ curl -I "$BASE/example"
 
 剪貼簿前端採 500 ms debounce、序列化寫入及 latest-value coalescing。同一頁面不會把較早請求排在較晚請求之後完成，初次讀取也不會自動把空內容寫回。寫入失敗保留 dirty 狀態，可手動重試；重新讀取/離開頁面會提示未儲存修改。多個裝置同時編輯仍採最後完成的寫入為準，沒有協作編輯、版本 CAS 或自動合併。
 
-token 僅存於目前分頁的 `sessionStorage`（不可用時保存在記憶體），不放 URL 或原始碼。剪貼簿內容不進 URL hash，不使用 `innerHTML` 渲染輸入。網頁提供 CSP，所有 API、錯誤和短網址轉址都是 `Cache-Control: no-store`。不提供寬鬆跨來源 CORS；內建頁面同網域，CLI 不受影響。
+剪貼簿和短網址頁開啟後直接讀取 API；公開模式沒有登入步驟，啟用驗證的部署才需輸入 token。選填的 token 僅存於目前分頁的 `sessionStorage`（不可用時保存在記憶體），不放 URL 或原始碼；未填時不送 `Authorization` header。剪貼簿內容不進 URL hash，不使用 `innerHTML` 渲染輸入。網頁提供 CSP，所有 API、錯誤和短網址轉址都是 `Cache-Control: no-store`。
 
-這是單人共享 token 工具，不是多租戶服務。讀寫皆需 token；持有 token 者可讀寫整份剪貼簿及所有短網址。D1 儲存的是可供服務讀取的內容，並非端對端加密。公開短網址也不是保密機制。額外的登入、rate limiting 或 Cloudflare Access 請依公開程度設定，避免濫用免費額度。
+這是共享資料工具，不是多租戶服務。**公開模式下，任何人都能讀寫整份剪貼簿、列出及新增/更新/刪除短網址**；內容不應視為私密。選用驗證模式時，這些操作只限持有 token 者。D1 儲存的是可供服務讀取的內容，並非端對端加密。公開短網址也不是保密機制。請依使用量自行考量 rate limiting；本專案不強制登入或 Cloudflare Access。
 
 ## 與舊服務的差異 / 切換
 
-API 路徑及主要 JSON 欄位保留，但以下是刻意變更：所有管理 API 新增 token 驗證；轉址由 301 改 302 + no-store；列出短網址改成有上限的游標分頁；自動短碼由 4 碼改 8 碼；自訂碼與 URL 驗證收緊。舊客戶端需要加上 Authorization，完整列舉時必須處理游標。既有瀏覽器曾快取的 301 不能由新伺服器撤銷。
+API 路徑及主要 JSON 欄位保留，但以下是刻意變更：驗證可選且預設公開；轉址由 301 改 302 + no-store；列出短網址改成有上限的游標分頁；自動短碼由 4 碼改 8 碼；自訂碼與 URL 驗證收緊。公開模式下舊客戶端不必新增 Authorization，完整列舉時仍須處理游標。既有瀏覽器曾快取的 301 不能由新伺服器撤銷。
 
 這次重寫不會連線、清空或自動搬移舊 Redis，也不會自動改 DNS。切換前暫停舊服務寫入，從舊 API 讀取 `/api/v1/pb` 和 `/api/v1/surl` 並妥善保存，再透過新 API 寫回剪貼簿及每一個相同 `shorten` 的短網址。先確認舊短碼符合新的規則；不符合時需要先調整規則或另外安排轉址，不能直接忽略失敗。逐筆核對成功回應、完整列出新清單及測試轉址後，才切換網域；保留舊服務和資料直到驗證完成。
 
@@ -113,4 +127,4 @@ npx wrangler deploy --dry-run --outdir build/dry-run
 
 Rust 單元測試涵蓋驗證、JSON 型別、token、短碼與分頁；Python SQLite 測試執行 runtime 直接 `include_str!` 的同一組 SQL，驗證唯一鍵、碰撞、刪除和索引；Node 測試剪貼簿寫入佇列。
 
-`test:http` 會建立隔離的暫存 D1、隨機本機 token，啟動真實 Wrangler/workerd 並測試靜態頁面、API、chunked body、並行新增、即時修改/刪除、分頁；之後重新啟動無 token 的 Worker，驗證 fail-closed。它只允許本機回圈位址，不會操作正式資料庫。CI 使用同一流程，僅做部署 dry-run，不做正式部署。
+`test:http` 會建立隔離的暫存 D1、隨機本機 token，啟動真實 Wrangler/workerd 並測試靜態頁面、API、chunked body、並行新增、即時修改/刪除、分頁，以及錯誤 token 的 401。之後分別以未設定 token、空 token 重新啟動 Worker，測試無 Authorization 的剪貼簿讀寫、短網址新增/更新/列表/刪除及跨來源 CORS。它只允許本機回圈位址，不會操作正式資料庫。CI 使用同一流程，僅做部署 dry-run，不做正式部署。

@@ -1,3 +1,4 @@
+import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -23,6 +24,7 @@ const shared = ['--config', configFile, '--persist-to', state];
 let server;
 let log = '';
 const base = 'http://127.0.0.1:18787';
+const origin = 'https://magic-box.example';
 
 async function start() {
   server = spawn(process.execPath, [cli, 'dev', '--local', '--ip', '127.0.0.1', '--port', '18787', ...shared], {
@@ -50,6 +52,48 @@ async function stop() {
   if (server.exitCode === null && server.signalCode === null) server.kill('SIGKILL');
 }
 
+async function checkPublicApi() {
+  const call = (path, method = 'GET', body) => fetch(`${base}${path}`, {
+    method, redirect: 'manual', signal: AbortSignal.timeout(5000),
+    headers: { Origin: origin, ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  for (const [path, method] of [['/api/v1/pb', 'POST'], ['/api/v1/surl', 'POST'], ['/api/v1/surl/publicmode', 'DELETE']]) {
+    const preflight = await fetch(`${base}${path}`, {
+      method: 'OPTIONS', signal: AbortSignal.timeout(5000),
+      headers: { Origin: origin, 'Access-Control-Request-Method': method, 'Access-Control-Request-Headers': 'content-type' },
+    });
+    assert.equal(preflight.status, 204);
+    assert.equal(preflight.headers.get('access-control-allow-origin'), '*');
+    assert.ok(preflight.headers.get('access-control-allow-methods').split(/,\s*/).includes(method));
+    assert.match(preflight.headers.get('access-control-allow-headers'), /content-type/i);
+  }
+  assert.equal((await call('/api/v1/pb', 'POST', { text: 'public clipboard' })).status, 204);
+  const clipboard = await call('/api/v1/pb');
+  assert.equal(clipboard.status, 200);
+  assert.equal(clipboard.headers.get('access-control-allow-origin'), '*');
+  assert.deepEqual(await clipboard.json(), { text: 'public clipboard' });
+  assert.equal((await call('/api/v1/pb', 'HEAD')).status, 200);
+  for (const url of ['https://example.com/public-first', 'https://example.com/public-second']) {
+    const saved = await call('/api/v1/surl', 'POST', { url, shorten: 'publicmode' });
+    assert.equal(saved.status, 200);
+    assert.deepEqual(await saved.json(), { url, shorten: 'publicmode' });
+    const redirect = await call('/publicmode');
+    assert.equal(redirect.status, 302);
+    assert.equal(redirect.headers.get('location'), url);
+  }
+  const listed = await call('/api/v1/surl?limit=1');
+  assert.equal(listed.status, 200);
+  assert.equal(listed.headers.get('access-control-expose-headers'), 'X-Next-Cursor');
+  assert.equal((await listed.json()).length, 1);
+  assert.equal((await call('/api/v1/surl/publicmode', 'DELETE')).status, 204);
+  assert.equal((await call('/publicmode')).status, 404);
+  const invalid = await call('/api/v1/pb', 'POST', {});
+  assert.equal(invalid.status, 400);
+  assert.equal(invalid.headers.get('access-control-allow-origin'), '*');
+  await invalid.text();
+}
+
 try {
   const migration = spawnSync(process.execPath, [cli, 'd1', 'migrations', 'apply', 'DB', '--local', ...shared], {
     cwd: root, encoding: 'utf8', timeout: 60_000,
@@ -57,6 +101,12 @@ try {
   });
   if (migration.error || migration.status !== 0) throw new Error(migration.error?.message || migration.stdout + migration.stderr);
   await start();
+  const unauthorised = await fetch(`${base}/api/v1/pb`, {
+    signal: AbortSignal.timeout(5000), headers: { Origin: origin, Authorization: 'Bearer incorrect' },
+  });
+  assert.equal(unauthorised.status, 401);
+  assert.equal(unauthorised.headers.get('access-control-allow-origin'), '*');
+  await unauthorised.text();
   // Keep the parent event loop running so workerd error logs are drained during tests.
   const status = await new Promise((resolveTest, rejectTest) => {
     const tests = spawn(process.execPath, ['--test', 'tests/http.integration.mjs'], {
@@ -68,13 +118,15 @@ try {
   });
   if (status !== 0) throw new Error(`HTTP tests failed.\n${log}`);
   await stop();
-  // Exercise fail-closed behaviour with no configured secret, not just a bad token.
-  config.vars = {};
-  writeFileSync(configFile, JSON.stringify(config));
-  await start();
-  const missingSecret = await fetch(`${base}/api/v1/pb`, { signal: AbortSignal.timeout(5000) });
-  if (missingSecret.status !== 503) throw new Error(`Expected 503 without API_TOKEN, got ${missingSecret.status}`);
-  console.log('Missing-secret fail-closed test passed.');
+  // Both missing and explicitly empty tokens select the public API mode.
+  for (const vars of [{}, { API_TOKEN: '' }]) {
+    config.vars = vars;
+    writeFileSync(configFile, JSON.stringify(config));
+    await start();
+    await checkPublicApi();
+    console.log(`Public API and CORS tests passed (${Object.hasOwn(vars, 'API_TOKEN') ? 'empty' : 'missing'} API_TOKEN).`);
+    await stop();
+  }
 } finally {
   await stop();
   rmSync(temporary, { recursive: true, force: true });

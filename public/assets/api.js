@@ -9,9 +9,12 @@ export function setToken(value) {
 }
 
 export async function api(path, { method = 'GET', body } = {}) {
+  const headers = {};
+  if (token) headers.Authorization = `Bearer ${token}`;
+  if (body !== undefined) headers['Content-Type'] = 'application/json';
   const response = await fetch(path, {
     method,
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    headers,
     credentials: 'omit',
     cache: 'no-store',
     body: body === undefined ? undefined : JSON.stringify(body),

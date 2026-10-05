@@ -10,8 +10,8 @@
 <body>
   <nav><a href="/">Toolbox</a><a href="/pb">剪貼簿</a><a href="/marquee">跑馬燈</a></nav>
   <h1>短網址管理</h1>
-  <form id="connect" class="row">
-    <input id="token" type="password" aria-label="API token" placeholder="API token" autocomplete="off" required><button>連線</button>
+  <form id="connect" class="row" hidden>
+    <input id="token" type="password" aria-label="API token（選填）" placeholder="API token（公開模式可留空）" autocomplete="off"><button>連線／重試</button>
   </form>
   <form id="create" class="row" hidden>
     <input id="url" type="url" aria-label="目的網址" placeholder="https://example.com/" required>
@@ -19,7 +19,7 @@
     <button>新增／更新</button>
   </form>
   <p>指定已存在的短碼會更新目的網址；留空會產生隨機短碼。</p>
-  <output id="status" aria-live="polite"></output>
+  <output id="status" aria-live="polite">讀取中…</output>
   <ul id="links"></ul><button id="more" hidden>下一頁</button>
 </body>
 </html>

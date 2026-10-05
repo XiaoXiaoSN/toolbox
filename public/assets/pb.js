@@ -79,3 +79,5 @@ window.addEventListener('beforeunload', (event) => {
     event.returnValue = '';
   }
 });
+
+void load();
