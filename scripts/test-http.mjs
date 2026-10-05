@@ -1,4 +1,4 @@
-import assert from 'node:assert/strict';
+import { strict as httpAssert } from 'node:assert';
 import { mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -63,34 +63,34 @@ async function checkPublicApi() {
       method: 'OPTIONS', signal: AbortSignal.timeout(5000),
       headers: { Origin: origin, 'Access-Control-Request-Method': method, 'Access-Control-Request-Headers': 'content-type' },
     });
-    assert.equal(preflight.status, 204);
-    assert.equal(preflight.headers.get('access-control-allow-origin'), '*');
-    assert.ok(preflight.headers.get('access-control-allow-methods').split(/,\s*/).includes(method));
-    assert.match(preflight.headers.get('access-control-allow-headers'), /content-type/i);
+    httpAssert.equal(preflight.status, 204);
+    httpAssert.equal(preflight.headers.get('access-control-allow-origin'), '*');
+    httpAssert.ok(preflight.headers.get('access-control-allow-methods').split(/,\s*/).includes(method));
+    httpAssert.match(preflight.headers.get('access-control-allow-headers'), /content-type/i);
   }
-  assert.equal((await call('/api/v1/pb', 'POST', { text: 'public clipboard' })).status, 204);
+  httpAssert.equal((await call('/api/v1/pb', 'POST', { text: 'public clipboard' })).status, 204);
   const clipboard = await call('/api/v1/pb');
-  assert.equal(clipboard.status, 200);
-  assert.equal(clipboard.headers.get('access-control-allow-origin'), '*');
-  assert.deepEqual(await clipboard.json(), { text: 'public clipboard' });
-  assert.equal((await call('/api/v1/pb', 'HEAD')).status, 200);
+  httpAssert.equal(clipboard.status, 200);
+  httpAssert.equal(clipboard.headers.get('access-control-allow-origin'), '*');
+  httpAssert.deepEqual(await clipboard.json(), { text: 'public clipboard' });
+  httpAssert.equal((await call('/api/v1/pb', 'HEAD')).status, 200);
   for (const url of ['https://example.com/public-first', 'https://example.com/public-second']) {
     const saved = await call('/api/v1/surl', 'POST', { url, shorten: 'publicmode' });
-    assert.equal(saved.status, 200);
-    assert.deepEqual(await saved.json(), { url, shorten: 'publicmode' });
+    httpAssert.equal(saved.status, 200);
+    httpAssert.deepEqual(await saved.json(), { url, shorten: 'publicmode' });
     const redirect = await call('/publicmode');
-    assert.equal(redirect.status, 302);
-    assert.equal(redirect.headers.get('location'), url);
+    httpAssert.equal(redirect.status, 302);
+    httpAssert.equal(redirect.headers.get('location'), url);
   }
   const listed = await call('/api/v1/surl?limit=1');
-  assert.equal(listed.status, 200);
-  assert.equal(listed.headers.get('access-control-expose-headers'), 'X-Next-Cursor');
-  assert.equal((await listed.json()).length, 1);
-  assert.equal((await call('/api/v1/surl/publicmode', 'DELETE')).status, 204);
-  assert.equal((await call('/publicmode')).status, 404);
+  httpAssert.equal(listed.status, 200);
+  httpAssert.equal(listed.headers.get('access-control-expose-headers'), 'X-Next-Cursor');
+  httpAssert.equal((await listed.json()).length, 1);
+  httpAssert.equal((await call('/api/v1/surl/publicmode', 'DELETE')).status, 204);
+  httpAssert.equal((await call('/publicmode')).status, 404);
   const invalid = await call('/api/v1/pb', 'POST', {});
-  assert.equal(invalid.status, 400);
-  assert.equal(invalid.headers.get('access-control-allow-origin'), '*');
+  httpAssert.equal(invalid.status, 400);
+  httpAssert.equal(invalid.headers.get('access-control-allow-origin'), '*');
   await invalid.text();
 }
 
@@ -104,8 +104,8 @@ try {
   const unauthorised = await fetch(`${base}/api/v1/pb`, {
     signal: AbortSignal.timeout(5000), headers: { Origin: origin, Authorization: 'Bearer incorrect' },
   });
-  assert.equal(unauthorised.status, 401);
-  assert.equal(unauthorised.headers.get('access-control-allow-origin'), '*');
+  httpAssert.equal(unauthorised.status, 401);
+  httpAssert.equal(unauthorised.headers.get('access-control-allow-origin'), '*');
   await unauthorised.text();
   // Keep the parent event loop running so workerd error logs are drained during tests.
   const status = await new Promise((resolveTest, rejectTest) => {
