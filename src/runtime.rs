@@ -40,12 +40,8 @@ async fn fetch(mut request: Request, env: Env, _ctx: Context) -> worker::Result<
         }
     };
     response.headers_mut().set("Cache-Control", "no-store")?;
-    response
-        .headers_mut()
-        .set("X-Content-Type-Options", "nosniff")?;
-    response
-        .headers_mut()
-        .set("Referrer-Policy", "no-referrer")?;
+    response.headers_mut().set("X-Content-Type-Options", "nosniff")?;
+    response.headers_mut().set("Referrer-Policy", "no-referrer")?;
     if response.status_code() == 401 {
         response.headers_mut().set("WWW-Authenticate", "Bearer")?;
     }
@@ -205,10 +201,7 @@ async fn put_link(request: &mut Request, env: &Env) -> ApiResult<Response> {
         }
         let saved = db
             .prepare(include_str!("../sql/upsert_link.sql"))
-            .bind(&[
-                JsValue::from_str(&link.shorten),
-                JsValue::from_str(&link.url),
-            ])?
+            .bind(&[JsValue::from_str(&link.shorten), JsValue::from_str(&link.url)])?
             .first::<ShortLink>(None)
             .await?
             .ok_or(ApiError::Client(500, "Short link was not saved"))?;
@@ -222,20 +215,14 @@ async fn put_link(request: &mut Request, env: &Env) -> ApiResult<Response> {
         link.shorten = domain::random_code(bytes);
         let inserted = db
             .prepare(include_str!("../sql/insert_link.sql"))
-            .bind(&[
-                JsValue::from_str(&link.shorten),
-                JsValue::from_str(&link.url),
-            ])?
+            .bind(&[JsValue::from_str(&link.shorten), JsValue::from_str(&link.url)])?
             .first::<String>(Some("shorten"))
             .await?;
         if inserted.is_some() {
             return Ok(Response::from_json(&link)?);
         }
     }
-    Err(ApiError::Client(
-        503,
-        "Could not allocate a short code; retry",
-    ))
+    Err(ApiError::Client(503, "Could not allocate a short code; retry"))
 }
 
 async fn list_links(request: &Request, env: &Env) -> ApiResult<Response> {
