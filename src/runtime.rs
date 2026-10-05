@@ -53,10 +53,7 @@ async fn fetch(mut request: Request, env: Env, _ctx: Context) -> worker::Result<
         let headers = response.headers_mut();
         headers.set("Access-Control-Allow-Origin", "*")?;
         headers.set("Access-Control-Allow-Headers", "Authorization, Content-Type")?;
-        headers.set(
-            "Access-Control-Allow-Methods",
-            "GET, HEAD, POST, DELETE, OPTIONS",
-        )?;
+        headers.set("Access-Control-Allow-Methods", "GET, HEAD, POST, DELETE, OPTIONS")?;
         headers.set("Access-Control-Expose-Headers", "X-Next-Cursor")?;
     }
     if is_head {
