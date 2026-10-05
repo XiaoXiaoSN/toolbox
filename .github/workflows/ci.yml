@@ -45,9 +45,17 @@ jobs:
       - name: Build release Wasm
         run: npm run build
       - name: Real local Worker integration tests
-        run: npm run test:http
+        shell: bash
+        run: npm run test:http 2>&1 | tee build/http-tests.log
       - name: Deployment dry run
         run: npx wrangler deploy --dry-run --outdir build/dry-run
+      - name: Save HTTP diagnostics
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: http-diagnostics
+          path: build/http-tests.log
+          if-no-files-found: ignore
       - name: Save build and resolved dependency locks
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
