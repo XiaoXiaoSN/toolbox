@@ -192,14 +192,16 @@ async fn put_link(request: &mut Request, env: &Env) -> ApiResult<Response> {
         if !domain::valid_code(&link.shorten) {
             return Err(ApiError::Client(400, "Invalid or reserved short code"));
         }
-        db.prepare(include_str!("../sql/upsert_link.sql"))
+        let saved = db
+            .prepare(include_str!("../sql/upsert_link.sql"))
             .bind(&[
                 JsValue::from_str(&link.shorten),
                 JsValue::from_str(&link.url),
             ])?
-            .run()
-            .await?;
-        return Ok(Response::from_json(&link)?);
+            .first::<ShortLink>(None)
+            .await?
+            .ok_or(ApiError::Client(500, "Short link was not saved"))?;
+        return Ok(Response::from_json(&saved)?);
     }
     // Collisions retry an atomic INSERT, never an overwrite or a read-then-write.
     for _ in 0..8 {

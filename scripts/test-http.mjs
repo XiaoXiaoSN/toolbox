@@ -34,7 +34,7 @@ async function start() {
   server.stderr.on('data', (data) => { log += data; });
   server.on('error', (error) => { log += error.message; });
   for (let attempt = 0; attempt < 100; attempt++) {
-    if (server.exitCode !== null) throw new Error(`Worker exited: ${log}`);
+    if ((server.exitCode !== null || server.signalCode !== null)) throw new Error(`Worker exited: ${log}`);
     try {
       if ((await fetch(`${base}/healthz`, { signal: AbortSignal.timeout(1000) })).status === 200) return;
     } catch { /* Server not ready. */ }
@@ -44,10 +44,10 @@ async function start() {
 }
 
 async function stop() {
-  if (!server || server.exitCode !== null) return;
+  if (!server || (server.exitCode !== null || server.signalCode !== null)) return;
   server.kill('SIGTERM');
-  for (let attempt = 0; attempt < 50 && server.exitCode === null; attempt++) await delay(100);
-  if (server.exitCode === null) server.kill('SIGKILL');
+  for (let attempt = 0; attempt < 50 && server.exitCode === null && server.signalCode === null; attempt++) await delay(100);
+  if (server.exitCode === null && server.signalCode === null) server.kill('SIGKILL');
 }
 
 try {
@@ -57,11 +57,16 @@ try {
   });
   if (migration.error || migration.status !== 0) throw new Error(migration.error?.message || migration.stdout + migration.stderr);
   await start();
-  const tests = spawnSync(process.execPath, ['--test', 'tests/http.integration.mjs'], {
-    stdio: 'inherit', timeout: 90_000,
-    env: { ...process.env, TOOLBOX_BASE_URL: base, TOOLBOX_API_TOKEN: token },
+  // Keep the parent event loop running so workerd error logs are drained during tests.
+  const status = await new Promise((resolveTest, rejectTest) => {
+    const tests = spawn(process.execPath, ['--test', 'tests/http.integration.mjs'], {
+      stdio: 'inherit', timeout: 90_000,
+      env: { ...process.env, TOOLBOX_BASE_URL: base, TOOLBOX_API_TOKEN: token },
+    });
+    tests.on('error', rejectTest);
+    tests.on('close', (code) => resolveTest(code));
   });
-  if (tests.error || tests.status !== 0) throw new Error(`HTTP tests failed. ${tests.error?.message || ''}\n${log}`);
+  if (status !== 0) throw new Error(`HTTP tests failed.\n${log}`);
   await stop();
   // Exercise fail-closed behaviour with no configured secret, not just a bad token.
   config.vars = {};

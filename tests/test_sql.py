@@ -35,8 +35,8 @@ class SqlTests(unittest.TestCase):
         self.assertEqual(self.query("get_link", "same"), [("https://first/",)])
 
     def test_custom_code_upsert_and_delete(self):
-        self.query("upsert_link", "custom", "https://first/")
-        self.query("upsert_link", "custom", "https://second/")
+        self.assertEqual(self.query("upsert_link", "custom", "https://first/"), [("https://first/", "custom")])
+        self.assertEqual(self.query("upsert_link", "custom", "https://second/"), [("https://second/", "custom")])
         self.assertEqual(self.query("get_link", "custom"), [("https://second/",)])
         self.assertEqual(self.query("delete_link", "custom"), [("custom",)])
         self.assertEqual(self.query("delete_link", "custom"), [])
