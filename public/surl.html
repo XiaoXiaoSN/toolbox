@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>短網址 · Toolbox</title>
+  <link rel="stylesheet" href="/assets/app.css">
+  <script type="module" src="/assets/surl.js"></script>
+</head>
+<body>
+  <nav><a href="/">Toolbox</a><a href="/pb">剪貼簿</a><a href="/marquee">跑馬燈</a></nav>
+  <h1>短網址管理</h1>
+  <form id="connect" class="row">
+    <input id="token" type="password" aria-label="API token" placeholder="API token" autocomplete="off" required><button>連線</button>
+  </form>
+  <form id="create" class="row" hidden>
+    <input id="url" type="url" aria-label="目的網址" placeholder="https://example.com/" required>
+    <input id="code" aria-label="自訂短碼" placeholder="自訂短碼（可留空）" maxlength="64" pattern="[A-Za-z0-9_\-]+">
+    <button>新增／更新</button>
+  </form>
+  <p>指定已存在的短碼會更新目的網址；留空會產生隨機短碼。</p>
+  <output id="status" aria-live="polite"></output>
+  <ul id="links"></ul><button id="more" hidden>下一頁</button>
+</body>
+</html>

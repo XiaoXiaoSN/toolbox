@@ -1,0 +1,2 @@
+# Local development only. Replace this token before using any remote environment.
+API_TOKEN="local-development-token-at-least-32-bytes"

@@ -1,1 +1,13 @@
-.vscode
+/target/
+/build/
+/node_modules/
+/.wrangler/
+/.dev.vars
+/.dev.vars.*
+!/.dev.vars.example
+/wrangler.production.json
+/migration-data.sql
+*.log
+.DS_Store
+
+__pycache__/
