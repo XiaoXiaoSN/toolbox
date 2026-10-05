@@ -1,0 +1,3 @@
+# Public API by default: leave API_TOKEN unset or empty.
+# Uncomment only to opt in to authentication for local development.
+# API_TOKEN="local-development-token-at-least-32-bytes"

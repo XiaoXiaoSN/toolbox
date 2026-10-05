@@ -1,0 +1,68 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+      - name: Install JS tooling
+        run: npm install --no-audit --no-fund
+      - name: Rust formatting
+        run: cargo fmt --all -- --check
+      - name: Native unit tests
+        run: cargo test
+      - name: Native lint
+        run: cargo clippy --all-targets -- -D warnings
+      - name: Wasm lint
+        run: cargo clippy --target wasm32-unknown-unknown -- -D warnings
+      - name: SQL and browser state tests
+        run: |
+          python3 -m unittest discover -s tests -p 'test_*.py' -v
+          npm test
+          for file in public/assets/*.js scripts/*.mjs; do node --check "$file"; done
+      - name: Install pinned Worker build tool
+        run: cargo install worker-build --version 0.8.7 --locked
+      - name: Build release Wasm
+        run: npm run build
+      - name: Real local Worker integration tests
+        shell: bash
+        run: npm run test:http 2>&1 | tee build/http-tests.log
+      - name: Deployment dry run
+        run: npx wrangler deploy --dry-run --outdir build/dry-run
+      - name: Save HTTP diagnostics
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: http-diagnostics
+          path: build/http-tests.log
+          if-no-files-found: ignore
+      - name: Save build and resolved dependency locks
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: toolbox-build
+          path: |
+            build/index.js
+            build/index_bg.wasm
+            Cargo.lock
+            package-lock.json

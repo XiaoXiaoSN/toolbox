@@ -1,0 +1,20 @@
+:root { color-scheme: dark light; font-family: system-ui, sans-serif; }
+body { max-width: 64rem; margin: 2rem auto; padding: 0 1rem; }
+nav, .row { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
+nav { margin-bottom: 2rem; }
+a { color: #54a8e8; }
+input, textarea, button { font: inherit; padding: .65rem; border: 1px solid #777; border-radius: .3rem; }
+input[type="password"], input[type="url"] { min-width: 16rem; flex: 1; }
+button { cursor: pointer; }
+button:disabled { cursor: wait; }
+textarea { box-sizing: border-box; width: 100%; min-height: 55vh; font-family: ui-monospace, monospace; margin: 1rem 0; resize: vertical; }
+label { display: inline-flex; gap: .5rem; align-items: center; }
+output { display: block; margin: 1rem 0; overflow-wrap: anywhere; }
+li { margin: 1rem 0; overflow-wrap: anywhere; }
+li button { margin-left: 1rem; }
+[hidden] { display: none !important; }
+body.marquee { margin: 0; padding: 0; max-width: none; background: #000; color: #fff; overflow: hidden; }
+#screen { height: 100dvh; display: flex; align-items: center; overflow: hidden; }
+#message { display: block; white-space: pre; font-size: 70vh; line-height: 1.1; will-change: transform; }
+#controls { position: fixed; bottom: 1rem; left: 1rem; right: 1rem; padding: 1rem; background: #171717e8; border-radius: .5rem; }
+#controls input { max-width: 50vw; }
